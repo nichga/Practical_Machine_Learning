@@ -1,0 +1,161 @@
+# Practical Machine Learning Project
+
+## Loading required packages
+```{r,eval=FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+#library(rattle)
+library(randomForest)
+```
+
+## Preparing the data
+
+```{r}
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"   
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv" 
+```
+
+```{r}
+training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))  
+testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+```
+
+### Randomly split the full training data (training) into a smaller training set (Mytraining) and a validation set (Mytesting):
+
+```{r}
+require(caret)  
+set.seed(1300)  
+inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)    
+myTraining <- training[inTrain, ]; myTesting <- training[-inTrain, ]  
+```
+```{r}
+ dim(myTraining); dim(myTesting) 
+```
+
+
+
+## Cleaning data
+### remove variables with nearly zero variance
+```{r}
+nzv <- nearZeroVar(myTraining)  
+myTraining <- myTraining[, -nzv]  
+myTesting <- myTesting[, -nzv]  
+```
+### remove variables that are almost always NA
+
+```{r}
+mostlyNA <- sapply(myTraining, function(x) mean(is.na(x))) > 0.95  
+myTraining <- myTraining[, mostlyNA==F]  
+myTesting <- myTesting[, mostlyNA==F]  
+```
+### remove variables that don't add to prediction
+### (X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp)
+### conveniently the first five variables
+
+```{r}
+myTraining <- myTraining[, -(1:5)]  
+myTesting <- myTesting[, -(1:5)]  
+```
+
+
+### Tested the RandonForest model to see performance and found satifactory for this exercise.
+### Then fit model on Mytraining, and instruct the “train” function to use 3-fold cross-validation to select optimal tuning parameters for the model.
+```{r}
+fitControl <- trainControl(method="cv", number=3, verboseIter=F)  
+fit <- train(classe ~ ., data=myTraining, method="rf", trControl=fitControl)  
+```
+
+### print final model to see tuning parameters it chose
+
+```{r}
+fit$finalModel  
+
+```
+
+
+
+
+
+### Model decided to ususe 500 trees and 27 variables tried at each split. Error rate: 0.17%
+
+
+## Evaluation
+
+### use model to predict classe in validation set (Mytesting)
+
+```{r}
+prediction <- predict(fit, newdata=myTesting)  
+```
+
+### show confusion matrix to get estimate of out-of-sample error
+
+```{r}
+confusionMatrix(myTesting$classe, prediction)  
+```
+
+### The accuracy is 99.7%, thus my predicted accuracy for the out-of-sample error is 0.3%. Good enough to contine
+
+
+## Training the Modeln the full traning set
+
+### Same steps as above for full training set
+###  remove variables with nearly zero variance
+```{r}
+nzv <- nearZeroVar(training)  
+training <- training[, -nzv]  
+testing <- testing[, -nzv]  
+```
+
+## remove variables that are almost always NA
+
+```{r}
+mostlyNA <- sapply(training, function(x) mean(is.na(x))) > 0.95  
+training <- training[, mostlyNA==F]  
+testing <- testing[, mostlyNA==F]  
+```
+### remove variables that don't add to prediction
+### (X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp)
+### conveniently the first five variables
+
+```{r}
+training <- training[, -(1:5)]  
+testing <- testing[, -(1:5)]  
+```
+
+## re-fit model using full training set (training)
+
+```{r}
+fitControl <- trainControl(method="cv", number=3, verboseIter=F)  
+fit <- train(classe ~ ., data=training, method="rf", trControl=fitControl)  
+```
+
+## Test Set Predictions
+### predict on test set
+
+```{r}
+prediction <- predict(fit, newdata=testing)  
+```
+### convert predictions to character vector
+```{r}
+prediction <- as.character(prediction)  
+```
+
+### create function to write predictions to files
+
+```{r,eval=FALSE}
+pml_write_files <- function(x) {  
+        n <- length(x)  
+        for(i in 1:n) {  
+                filename <- paste0("problem_id_", i, ".txt")  
+                write.table(x[i], file=filename, quote=F, row.names=F, col.names=F)  
+        }  
+}  
+
+```
+### create prediction files to submit
+
+```{r,eval=FALSE}
+pml_write_files(prediction)
+```
