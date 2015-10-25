@@ -1,0 +1,113 @@
+##Practical Machine Learning Project
+
+# Loading required packages
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+
+##Preparing the data
+
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+
+training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+
+# Randomly split the full training data (training) into a smaller training set (Mytraining) and a validation set (Mytesting):
+require(caret)
+set.seed(1300)
+inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+myTraining <- training[inTrain, ]; myTesting <- training[-inTrain, ]
+dim(myTraining); dim(myTesting)
+
+#Cleaning data
+# remove variables with nearly zero variance
+nzv <- nearZeroVar(myTraining)
+myTraining <- myTraining[, -nzv]
+myTesting <- myTesting[, -nzv]
+
+# remove variables that are almost always NA
+mostlyNA <- sapply(myTraining, function(x) mean(is.na(x))) > 0.95
+myTraining <- myTraining[, mostlyNA==F]
+myTesting <- myTesting[, mostlyNA==F]
+
+# remove variables that don't add to prediction
+#(X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp)
+#conveniently the first five variables
+
+myTraining <- myTraining[, -(1:5)]
+myTesting <- myTesting[, -(1:5)]
+
+
+
+#Tested the RandonForest model to see performance and foundt satifactory for thi exercise.
+
+#  fit model on Mytraining, and instruct the “train” function to use 3-fold cross-validation to select optimal tuning parameters for the model.
+fitControl <- trainControl(method="cv", number=3, verboseIter=F)
+fit <- train(classe ~ ., data=myTraining, method="rf", trControl=fitControl)
+
+
+# print final model to see tuning parameters it chose
+fit$finalModel
+
+#Model decided to ususe 500 trees and 27 variables tried at each split. Error rate: 0.17%
+
+
+##Evaluation
+
+# use model to predict classe in validation set (Mytesting)
+prediction <- predict(fit, newdata=myTesting)
+
+# show confusion matrix to get estimate of out-of-sample error
+confusionMatrix(myTesting$classe, prediction)
+
+#The accuracy is 99.7%, thus my predicted accuracy for the out-of-sample error is 0.3%. Good enough to contine
+
+##Training the Modeln the full traning set
+
+#Same steps as above for full training set
+# remove variables with nearly zero variance
+nzv <- nearZeroVar(training)
+training <- training[, -nzv]
+testing <- testing[, -nzv]
+
+# remove variables that are almost always NA
+mostlyNA <- sapply(training, function(x) mean(is.na(x))) > 0.95
+training <- training[, mostlyNA==F]
+testing <- testing[, mostlyNA==F]
+
+# remove variables that don't add to prediction
+#(X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp)
+#conveniently the first five variables
+
+training <- training[, -(1:5)]
+testing <- testing[, -(1:5)]
+
+# re-fit model using full training set (training)
+fitControl <- trainControl(method="cv", number=3, verboseIter=F)
+fit <- train(classe ~ ., data=training, method="rf", trControl=fitControl)
+
+
+##Test Set Predictions
+# predict on test set
+prediction <- predict(fit, newdata=testing)
+
+# convert predictions to character vector
+prediction <- as.character(prediction)
+
+# create function to write predictions to files
+pml_write_files <- function(x) {
+        n <- length(x)
+        for(i in 1:n) {
+                filename <- paste0("problem_id_", i, ".txt")
+                write.table(x[i], file=filename, quote=F, row.names=F, col.names=F)
+        }
+}
+
+# create prediction files to submit
+pml_write_files(prediction)
+
